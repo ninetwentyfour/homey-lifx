@@ -8,6 +8,24 @@ const SETTINGS_MANUAL_IPS = 'lifx.manual_ips';
 const SETTINGS_CLOUD_TOKEN = 'lifx.cloud_token';
 const SCENE_REFRESH_MS = 30 * 60 * 1000;
 
+// Matrix bulbs (Tube, Tile, Candle) — support morph/flame. Rainbow palette
+// is used for Color Cycle; Random uses the same palette shuffled per cycle.
+const MATRIX_PRODUCT_IDS = new Set<number>([55, 68, 81, 82, 176, 201, 202, 217, 218]);
+const RAINBOW_PALETTE = [
+  { hue: 0, saturation: 1, brightness: 1, kelvin: 3500 },
+  { hue: 60, saturation: 1, brightness: 1, kelvin: 3500 },
+  { hue: 120, saturation: 1, brightness: 1, kelvin: 3500 },
+  { hue: 180, saturation: 1, brightness: 1, kelvin: 3500 },
+  { hue: 240, saturation: 1, brightness: 1, kelvin: 3500 },
+  { hue: 300, saturation: 1, brightness: 1, kelvin: 3500 },
+];
+const RANDOM_PALETTE = Array.from({ length: 8 }, () => ({
+  hue: Math.floor(Math.random() * 360),
+  saturation: 1,
+  brightness: 1,
+  kelvin: 3500,
+}));
+
 export default class LifxApp extends Homey.App {
   private client!: LifxClient;
   private cloud: LifxCloudClient | null = null;
@@ -212,6 +230,51 @@ export default class LifxApp extends Homey.App {
     scene.registerRunListener(
       async (args: { scene: { id: string; name: string }; duration_sec?: number }) => {
         await this.activateSceneById(args.scene.id, args.duration_sec);
+      },
+    );
+
+    const effect = this.homey.flow.getActionCard('run_effect');
+    effect.registerRunListener(
+      async (args: {
+        device: Homey.Device;
+        effect: 'color_cycle' | 'random' | 'breathe' | 'pulse' | 'morph' | 'flame' | 'move';
+        period_sec?: number;
+      }) => {
+        if (!this.cloud) throw new Error('LIFX cloud token not configured in app settings.');
+        const lifxId = (args.device as unknown as { getLifxId(): string }).getLifxId();
+        const productId = (args.device.getStoreValue('productId') as number | undefined) ?? 0;
+        const isMatrix = MATRIX_PRODUCT_IDS.has(productId);
+        const period = args.period_sec ?? 5;
+        const selector = `id:${lifxId}`;
+
+        // Color Cycle / Random are preset compositions — matrix bulbs use
+        // morph with a palette; non-matrix fall back to breathe.
+        if (args.effect === 'color_cycle') {
+          if (isMatrix) {
+            await this.cloud.startEffect(selector, 'morph', { period, palette: RAINBOW_PALETTE });
+          } else {
+            await this.cloud.startEffect(selector, 'breathe', {
+              period,
+              cycles: 100,
+              from_color: 'red',
+              color: 'blue',
+            });
+          }
+          return;
+        }
+        if (args.effect === 'random') {
+          if (isMatrix) {
+            await this.cloud.startEffect(selector, 'morph', { period, palette: RANDOM_PALETTE });
+          } else {
+            await this.cloud.startEffect(selector, 'breathe', {
+              period,
+              cycles: 100,
+              color: 'saturation:1.0 brightness:1.0',
+            });
+          }
+          return;
+        }
+        await this.cloud.startEffect(selector, args.effect, { period });
       },
     );
   }

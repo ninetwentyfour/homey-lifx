@@ -81,6 +81,37 @@ export class LifxCloudClient {
     }
   }
 
+  /**
+   * Starts a firmware-driven effect on a bulb. Effect types:
+   * - breathe/pulse  — any bulb; soft/hard color cycle
+   * - morph/flame    — matrix devices (Tube, Tile, Candle)
+   * - move           — multizone devices (Beam, Z-Strip)
+   *
+   * `params` is forwarded as the request body; all fields optional (the
+   * server falls back to sensible defaults).
+   */
+  async startEffect(
+    selector: string,
+    effect: 'breathe' | 'pulse' | 'morph' | 'flame' | 'move',
+    params: Record<string, unknown> = {},
+  ): Promise<void> {
+    const response = await fetch(
+      `${this.base}/lights/${encodeURIComponent(selector)}/effects/${effect}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      },
+    );
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`LIFX cloud effects/${effect} ${response.status}: ${text}`);
+    }
+  }
+
   invalidate(): void {
     this.cache = undefined;
   }

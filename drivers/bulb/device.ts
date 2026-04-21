@@ -326,9 +326,14 @@ function asNumber(v: unknown, fallback: number): number {
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
+// Homey convention: light_temperature 0 = cool (high K), 1 = warm (low K).
+// Range spans LIFX's widest: 1500K (newer bulbs) to 9000K. Older bulbs
+// (Original, 2500K min) will clamp internally.
+const K_MIN = 1500;
+const K_MAX = 9000;
 function tempToKelvin(t: number): number {
-  return Math.round(2500 + clamp01(t) * (9000 - 2500));
+  return Math.round(K_MAX - clamp01(t) * (K_MAX - K_MIN));
 }
 function kelvinToTemp(kelvin: number): number {
-  return clamp01((kelvin - 2500) / (9000 - 2500));
+  return clamp01((K_MAX - kelvin) / (K_MAX - K_MIN));
 }
