@@ -6,7 +6,5 @@
   "uiQuickAction": false,
   "getable": true,
   "setable": true,
-  "values": [
-    { "id": "__none__", "title": { "en": "No scene configured" } }
-  ]
+  "values": [{ "id": "__none__", "title": { "en": "No scene configured" } }]
 }

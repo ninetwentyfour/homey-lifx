@@ -79,7 +79,9 @@ export default class LifxApp extends Homey.App {
    * Uses an ad-hoc client (not the singleton) so we don't clobber the current
    * configured cloud while testing.
    */
-  async testCloudToken(token: string): Promise<{ ok: boolean; sceneCount?: number; error?: string }> {
+  async testCloudToken(
+    token: string,
+  ): Promise<{ ok: boolean; sceneCount?: number; error?: string }> {
     if (!token) return { ok: false, error: 'Empty token' };
     const probe = new LifxCloudClient(token, {
       log: () => {},
@@ -107,7 +109,7 @@ export default class LifxApp extends Homey.App {
       if (scenes.length === 0) {
         return [{ id: '__none__', title: { en: 'No scenes saved in LIFX app' } }];
       }
-      const sorted = [...scenes].sort((a, b) => a.name.localeCompare(b.name));
+      const sorted = [...scenes].toSorted((a, b) => a.name.localeCompare(b.name));
       return [
         { id: '__none__', title: { en: '— Pick a scene —' } },
         ...sorted.map((s) => ({ id: s.uuid, title: { en: s.name } })),
@@ -200,7 +202,7 @@ export default class LifxApp extends Homey.App {
         const q = (query ?? '').toLowerCase();
         return scenes
           .filter((s) => !q || s.name.toLowerCase().includes(q))
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .toSorted((a, b) => a.name.localeCompare(b.name))
           .map((s) => ({ name: s.name, id: s.uuid }));
       } catch (err) {
         this.error('scene autocomplete failed:', err);
@@ -208,10 +210,7 @@ export default class LifxApp extends Homey.App {
       }
     });
     scene.registerRunListener(
-      async (args: {
-        scene: { id: string; name: string };
-        duration_sec?: number;
-      }) => {
+      async (args: { scene: { id: string; name: string }; duration_sec?: number }) => {
         await this.activateSceneById(args.scene.id, args.duration_sec);
       },
     );

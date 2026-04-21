@@ -15,14 +15,15 @@ async function readJson(path: string): Promise<any> {
 async function listJson(dir: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
   const entries = await readdir(dir);
-  return entries
-    .filter((e) => e.endsWith('.json'))
-    .map((e) => join(dir, e));
+  return entries.filter((e) => e.endsWith('.json')).map((e) => join(dir, e));
 }
 
 async function main(): Promise<void> {
   const base = await readJson(join(root, '.homeycompose', 'app.json'));
-  const out: any = { _comment: 'This file is generated. Edit .homeycompose/app.json instead.', ...base };
+  const out: any = {
+    _comment: 'This file is generated. Edit .homeycompose/app.json instead.',
+    ...base,
+  };
 
   // Drivers
   const driversDir = join(root, 'drivers');

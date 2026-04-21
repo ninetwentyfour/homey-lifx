@@ -1,35 +1,76 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; color: #222; }
-      h1 { font-size: 22px; margin: 0 0 4px; }
-      p.sub { color: #777; font-size: 14px; margin: 0 0 20px; line-height: 1.4; }
-      label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-      input[type="text"] {
-        width: 100%; box-sizing: border-box;
-        padding: 10px 12px; font-size: 16px;
-        border: 1px solid #bbb; border-radius: 8px;
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        padding: 20px;
+        color: #222;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      p.sub {
+        color: #777;
+        font-size: 14px;
+        margin: 0 0 20px;
+        line-height: 1.4;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+      input[type='text'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        font-size: 16px;
+        border: 1px solid #bbb;
+        border-radius: 8px;
       }
       button {
-        width: 100%; margin-top: 16px;
-        padding: 12px; font-size: 15px; font-weight: 600;
-        background: #00A9E0; color: #fff; border: none; border-radius: 8px;
+        width: 100%;
+        margin-top: 16px;
+        padding: 12px;
+        font-size: 15px;
+        font-weight: 600;
+        background: #00a9e0;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
         cursor: pointer;
       }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
-      #status { margin-top: 14px; font-size: 13px; min-height: 18px; color: #888; }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #status {
+        margin-top: 14px;
+        font-size: 13px;
+        min-height: 18px;
+        color: #888;
+      }
     </style>
   </head>
   <body>
     <h1>Enter bulb IP address</h1>
     <p class="sub">
-      Reserve the IP in your DHCP server so it doesn't change. The bulb must be reachable over UDP 56700 from Homey's network.
+      Reserve the IP in your DHCP server so it doesn't change. The bulb must be reachable over UDP
+      56700 from Homey's network.
     </p>
 
     <label for="ipInput">IP address</label>
-    <input id="ipInput" type="text" placeholder="192.168.3.42" autocomplete="off" spellcheck="false" />
+    <input
+      id="ipInput"
+      type="text"
+      placeholder="192.168.3.42"
+      autocomplete="off"
+      spellcheck="false"
+    />
     <button id="addBtn">Test and add</button>
     <div id="status"></div>
 
@@ -82,7 +123,11 @@
       // Fallback: invoke manually if auto-call never happens
       setTimeout(function () {
         if (!ready && typeof Homey !== 'undefined' && Homey) {
-          try { onHomeyReady(Homey); } catch (_e) { /* ignore */ }
+          try {
+            onHomeyReady(Homey);
+          } catch (_e) {
+            /* ignore */
+          }
         }
       }, 1500);
     </script>

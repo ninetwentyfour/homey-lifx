@@ -71,19 +71,16 @@ export default class LifxBulbDriver extends Homey.Driver {
       return await this.onPairListDevices();
     });
 
-    session.setHandler(
-      'manual_identify',
-      async (data: { ip: string }): Promise<PairDevice> => {
-        const info = await app.getClient().identify(data.ip, 5000);
-        app.rememberManualIp(info.address);
-        return {
-          name: info.label,
-          data: { id: info.id },
-          icon: iconForProduct(info.productId),
-          store: { address: info.address, productId: info.productId, isMultiZone: false },
-        };
-      },
-    );
+    session.setHandler('manual_identify', async (data: { ip: string }): Promise<PairDevice> => {
+      const info = await app.getClient().identify(data.ip, 5000);
+      app.rememberManualIp(info.address);
+      return {
+        name: info.label,
+        data: { id: info.id },
+        icon: iconForProduct(info.productId),
+        store: { address: info.address, productId: info.productId, isMultiZone: false },
+      };
+    });
   }
 }
 

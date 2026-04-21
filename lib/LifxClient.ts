@@ -31,16 +31,25 @@ export interface LightInfo {
 // SetTileEffect and route through the `bulb` driver today since the
 // standard light capabilities map cleanly via SetColor.
 const MULTIZONE_PRODUCT_IDS = new Set<number>([
-  31, 32,               // LIFX Z (original + v2)
-  38,                   // LIFX Beam
-  117, 118,             // LIFX Z US/Intl
-  119, 120,             // LIFX Beam US/Intl
-  141, 142,             // LIFX Neon US/Intl
-  143, 144,             // LIFX String US/Intl
-  161, 162,             // LIFX Outdoor Neon US/Intl
-  203, 204,             // LIFX String US/Intl (newer)
-  205, 206,             // LIFX Indoor Neon US/Intl
-  213, 214,             // LIFX Permanent Outdoor US/Intl
+  31,
+  32, // LIFX Z (original + v2)
+  38, // LIFX Beam
+  117,
+  118, // LIFX Z US/Intl
+  119,
+  120, // LIFX Beam US/Intl
+  141,
+  142, // LIFX Neon US/Intl
+  143,
+  144, // LIFX String US/Intl
+  161,
+  162, // LIFX Outdoor Neon US/Intl
+  203,
+  204, // LIFX String US/Intl (newer)
+  205,
+  206, // LIFX Indoor Neon US/Intl
+  213,
+  214, // LIFX Permanent Outdoor US/Intl
 ]);
 
 export class LifxClient extends EventEmitter {
@@ -101,7 +110,7 @@ export class LifxClient extends EventEmitter {
     return [...this.manualIps];
   }
 
-  getLight(id: string): any | null {
+  getLight(id: string): any {
     const light = this.client.light(id);
     return light === false ? null : light;
   }
@@ -259,7 +268,12 @@ function formatFirmware(v: FirmwareVersion | undefined): string | undefined {
   return `${major}.${String(minor).padStart(2, '0')}`;
 }
 
-function normalizeColor(c: { hue: number; saturation: number; brightness: number; kelvin: number }): HSBK {
+function normalizeColor(c: {
+  hue: number;
+  saturation: number;
+  brightness: number;
+  kelvin: number;
+}): HSBK {
   return {
     hue: c.hue,
     saturation: c.saturation,

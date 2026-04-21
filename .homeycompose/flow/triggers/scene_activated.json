@@ -6,10 +6,18 @@
     "en": "Fires when a scene is activated via the device's Scene picker or the Activate LIFX scene flow action."
   },
   "tokens": [
-    { "name": "scene_name", "type": "string", "title": { "en": "Scene name" }, "example": { "en": "Sunset" } },
-    { "name": "scene_id", "type": "string", "title": { "en": "Scene UUID" }, "example": { "en": "abc-123" } }
+    {
+      "name": "scene_name",
+      "type": "string",
+      "title": { "en": "Scene name" },
+      "example": { "en": "Sunset" }
+    },
+    {
+      "name": "scene_id",
+      "type": "string",
+      "title": { "en": "Scene UUID" },
+      "example": { "en": "abc-123" }
+    }
   ],
-  "args": [
-    { "type": "device", "name": "device", "filter": "driver_id=bulb" }
-  ]
+  "args": [{ "type": "device", "name": "device", "filter": "driver_id=bulb" }]
 }

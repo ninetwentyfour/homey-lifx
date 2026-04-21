@@ -87,9 +87,7 @@ export default class LifxBulbDevice extends Homey.Device {
     }
   }
 
-  override async onDiscoveryAddressChanged(
-    discoveryResult: Homey.DiscoveryResult,
-  ): Promise<void> {
+  override async onDiscoveryAddressChanged(discoveryResult: Homey.DiscoveryResult): Promise<void> {
     const addr = (discoveryResult as { address?: string }).address;
     if (addr) {
       this.log(`discovery address changed: ${addr}`);
@@ -163,20 +161,20 @@ export default class LifxBulbDevice extends Homey.Device {
     if (colorChanged) {
       void (this.homey.app as LifxApp).maybeStopCloudEffects(this.getLifxId());
     }
-    const pick = <T>(cap: string): T | undefined =>
-      cap in changed ? (changed[cap] as T) : (this.getCapabilityValue(cap) as T);
+    const pick = (cap: string): unknown =>
+      cap in changed ? changed[cap] : this.getCapabilityValue(cap);
 
-    const mode = pick<string>('light_mode') ?? 'color';
-    const dim = clamp01(asNumber(pick<number>('dim'), 1));
+    const mode = (pick('light_mode') as string | undefined) ?? 'color';
+    const dim = clamp01(asNumber(pick('dim') as number | undefined, 1));
     const brightness = dim * 100;
 
     let hsbk: HSBK;
     if (mode === 'temperature') {
-      const temperature = asNumber(pick<number>('light_temperature'), 0.5);
+      const temperature = asNumber(pick('light_temperature') as number | undefined, 0.5);
       hsbk = { hue: 0, saturation: 0, brightness, kelvin: tempToKelvin(temperature) };
     } else {
-      const hue = asNumber(pick<number>('light_hue'), 0) * 360;
-      const saturation = asNumber(pick<number>('light_saturation'), 1) * 100;
+      const hue = asNumber(pick('light_hue') as number | undefined, 0) * 360;
+      const saturation = asNumber(pick('light_saturation') as number | undefined, 1) * 100;
       hsbk = { hue, saturation, brightness, kelvin: 3500 };
     }
 
@@ -207,7 +205,9 @@ export default class LifxBulbDevice extends Homey.Device {
       await this.setEnergy({
         approximation: { usageOn: profile.usageOn, usageOff: profile.usageOff },
       });
-      this.log(`energy: productId ${productId} → ${profile.usageOn}W on / ${profile.usageOff}W off`);
+      this.log(
+        `energy: productId ${productId} → ${profile.usageOn}W on / ${profile.usageOff}W off`,
+      );
     } catch (err) {
       this.error('setEnergy failed:', err);
     }
