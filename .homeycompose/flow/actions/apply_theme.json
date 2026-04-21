@@ -1,0 +1,17 @@
+{
+  "id": "apply_theme",
+  "title": { "en": "Apply theme" },
+  "titleFormatted": { "en": "Apply theme [[theme]] to [[device]] (cycle)" },
+  "hint": {
+    "en": "Sets the bulb to the next color from the theme's palette. Each invocation advances one step and wraps around. On multi-zone devices the palette is distributed across zones."
+  },
+  "args": [
+    { "type": "device", "name": "device" },
+    {
+      "type": "autocomplete",
+      "name": "theme",
+      "title": { "en": "Theme" },
+      "placeholder": { "en": "Pick a theme" }
+    }
+  ]
+}

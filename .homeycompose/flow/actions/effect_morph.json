@@ -1,0 +1,26 @@
+{
+  "id": "effect_morph",
+  "title": { "en": "Start Morph effect" },
+  "titleFormatted": { "en": "Start Morph using theme [[theme]] on [[device]] (cycle [[cycle_ms]] ms)" },
+  "hint": {
+    "en": "Cycles through a theme's palette smoothly. Stop Effect restores the prior state."
+  },
+  "args": [
+    { "type": "device", "name": "device" },
+    {
+      "type": "autocomplete",
+      "name": "theme",
+      "title": { "en": "Theme" },
+      "placeholder": { "en": "Pick a theme" }
+    },
+    {
+      "type": "number",
+      "name": "cycle_ms",
+      "title": { "en": "Cycle (ms)" },
+      "min": 1000,
+      "max": 60000,
+      "step": 500,
+      "placeholder": "6000"
+    }
+  ]
+}

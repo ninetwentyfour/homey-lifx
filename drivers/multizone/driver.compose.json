@@ -1,0 +1,56 @@
+{
+  "name": {
+    "en": "LIFX Multizone"
+  },
+  "class": "light",
+  "capabilities": [
+    "onoff",
+    "dim",
+    "light_hue",
+    "light_saturation",
+    "light_temperature",
+    "light_mode",
+    "lifx_scene"
+  ],
+  "platforms": ["local"],
+  "connectivity": ["lan"],
+  "discovery": "lifx",
+  "energy": {
+    "approximation": {
+      "usageOff": 0.5,
+      "usageOn": 15
+    }
+  },
+  "images": {
+    "small": "/drivers/multizone/assets/images/small.png",
+    "large": "/drivers/multizone/assets/images/large.png",
+    "xlarge": "/drivers/multizone/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "start",
+      "navigation": {
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "next": "add_devices",
+        "prev": "start"
+      }
+    },
+    {
+      "id": "manual_ip",
+      "navigation": {
+        "next": "add_devices",
+        "prev": "start"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+}

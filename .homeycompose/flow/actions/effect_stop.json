@@ -1,0 +1,9 @@
+{
+  "id": "effect_stop",
+  "title": { "en": "Stop effect" },
+  "titleFormatted": { "en": "Stop any running effect on [[device]] (restore state)" },
+  "hint": {
+    "en": "Cancels any active Morph or Candle and restores the bulb to its state from before the effect started."
+  },
+  "args": [{ "type": "device", "name": "device" }]
+}

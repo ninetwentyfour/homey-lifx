@@ -1,0 +1,25 @@
+{
+  "id": "activate_scene",
+  "title": { "en": "Activate LIFX scene" },
+  "titleFormatted": { "en": "Activate LIFX scene [[scene]] (fade [[duration_sec]] s)" },
+  "hint": {
+    "en": "Runs a scene saved in your LIFX app. Scenes are synced from cloud.lifx.com and update automatically. Fade is the transition duration in seconds."
+  },
+  "args": [
+    {
+      "type": "autocomplete",
+      "name": "scene",
+      "title": { "en": "Scene" },
+      "placeholder": { "en": "Pick a scene" }
+    },
+    {
+      "type": "number",
+      "name": "duration_sec",
+      "title": { "en": "Fade (s)" },
+      "min": 0,
+      "max": 3600,
+      "step": 0.5,
+      "placeholder": "1"
+    }
+  ]
+}

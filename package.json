@@ -1,0 +1,28 @@
+{
+  "name": "com.tberry.lifx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Homey Pro app for LIFX bulbs over LAN with mDNS discovery + manual IP fallback.",
+  "main": "app.js",
+  "scripts": {
+    "compose": "bun scripts/compose.ts",
+    "build": "bun run compose && tsgo",
+    "build:watch": "tsgo --watch",
+    "validate": "bun run compose && bunx --bun homey app validate",
+    "homey": "bun run build && bunx --bun homey app run",
+    "lint": "oxlint --fix --tsconfig=tsconfig.json",
+    "fmt": "oxfmt --write .",
+    "fmt:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "lifx-lan-client": "^2.1.2"
+  },
+  "devDependencies": {
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.6",
+    "@types/node": "^18.19.0",
+    "@typescript/native-preview": "latest",
+    "oxfmt": "^0.44.0",
+    "oxlint": "^1.59.0",
+    "oxlint-tsgolint": "^0.20.0"
+  }
+}

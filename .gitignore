@@ -1,0 +1,15 @@
+node_modules/
+.env
+.DS_Store
+
+# Generated from .homeycompose
+app.json
+app.js
+api.js
+lib/**/*.js
+drivers/**/*.js
+!drivers/**/*.compose.json
+
+
+# Added by Homey CLI
+/.homeybuild/

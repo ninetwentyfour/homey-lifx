@@ -1,0 +1,12 @@
+{
+  "type": "enum",
+  "title": { "en": "Scene" },
+  "desc": { "en": "Activate a LIFX scene saved in your LIFX app" },
+  "uiComponent": "picker",
+  "uiQuickAction": false,
+  "getable": true,
+  "setable": true,
+  "values": [
+    { "id": "__none__", "title": { "en": "No scene configured" } }
+  ]
+}
