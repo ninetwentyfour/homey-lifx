@@ -167,7 +167,21 @@ export default class LifxBulbDevice extends Homey.Device {
     const pick = (cap: string): unknown =>
       cap in changed ? changed[cap] : this.getCapabilityValue(cap);
 
-    const mode = (pick('light_mode') as string | undefined) ?? 'color';
+    // Infer mode from which capability actually changed. Homey's UI often
+    // sends just `light_temperature` (or just `light_hue`/`light_saturation`)
+    // without an accompanying `light_mode`, so trusting the stored mode would
+    // route a temperature drag through the color path.
+    let mode: string;
+    if ('light_mode' in changed) {
+      mode = changed['light_mode'] as string;
+    } else if ('light_temperature' in changed) {
+      mode = 'temperature';
+    } else if ('light_hue' in changed || 'light_saturation' in changed) {
+      mode = 'color';
+    } else {
+      mode = (this.getCapabilityValue('light_mode') as string | undefined) ?? 'color';
+    }
+
     const dim = clamp01(asNumber(pick('dim') as number | undefined, 1));
     const brightness = dim * 100;
 
@@ -179,6 +193,10 @@ export default class LifxBulbDevice extends Homey.Device {
       const hue = asNumber(pick('light_hue') as number | undefined, 0) * 360;
       const saturation = asNumber(pick('light_saturation') as number | undefined, 1) * 100;
       hsbk = { hue, saturation, brightness, kelvin: 3500 };
+    }
+
+    if (this.getCapabilityValue('light_mode') !== mode) {
+      await this.setCapabilityValue('light_mode', mode).catch(() => {});
     }
 
     await this.client().setColor(this.getLifxId(), hsbk, 200);
