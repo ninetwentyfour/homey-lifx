@@ -14,6 +14,8 @@ export default class LifxBulbDevice extends Homey.Device {
   private failures = 0;
   private onlineHandler?: (id: string) => void;
   private primed = false;
+  private sceneDebounceTimer?: NodeJS.Timeout;
+  private sceneDebounceValue?: string;
 
   override async onInit(): Promise<void> {
     this.log(`LifxBulbDevice init: ${this.getName()}`);
@@ -69,6 +71,7 @@ export default class LifxBulbDevice extends Homey.Device {
 
   override async onDeleted(): Promise<void> {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.sceneDebounceTimer) clearTimeout(this.sceneDebounceTimer);
     if (this.onlineHandler) {
       const client = (this.homey.app as LifxApp).getClient();
       client.off('light-online', this.onlineHandler);
@@ -183,16 +186,22 @@ export default class LifxBulbDevice extends Homey.Device {
 
   private async onCapScene(value: string): Promise<void> {
     if (!value || value === '__none__') return;
+
+    // Debounce: if the user keeps scrolling through scenes, don't fire on
+    // every intermediate value — wait until they've settled for 1s.
+    this.sceneDebounceValue = value;
+    if (this.sceneDebounceTimer) clearTimeout(this.sceneDebounceTimer);
+    this.sceneDebounceTimer = setTimeout(() => {
+      const pick = this.sceneDebounceValue;
+      if (!pick || pick === '__none__') return;
+      this.activateScene(pick).catch((err) => this.error('scene activate failed:', err));
+    }, 1000);
+  }
+
+  private async activateScene(sceneId: string): Promise<void> {
     const app = this.homey.app as LifxApp;
-    try {
-      const scene = await app.activateSceneById(value);
-      if (scene) app.fireSceneActivatedTrigger(this, scene);
-    } finally {
-      // Reset the picker so selecting the same scene again re-fires it.
-      setTimeout(() => {
-        this.setCapabilityValue('lifx_scene', '__none__').catch(() => {});
-      }, 500);
-    }
+    const scene = await app.activateSceneById(sceneId);
+    if (scene) app.fireSceneActivatedTrigger(this, scene);
   }
 
   // ─── Migrations + setup ─────────────────────────────────────────────
