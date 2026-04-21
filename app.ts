@@ -1,35 +1,28 @@
 import Homey from 'homey';
 
 import type LifxBulbDevice from './drivers/bulb/device';
-import type LifxMultizoneDevice from './drivers/multizone/device';
 import { LifxClient } from './lib/LifxClient';
-import { LifxCloudClient } from './lib/LifxCloudClient';
-import { EffectManager } from './lib/effects';
-import { ThemeStore } from './lib/themes';
-import type { PaletteColor } from './lib/types';
+import { LifxCloudClient, type CloudScene } from './lib/LifxCloudClient';
 
 const SETTINGS_MANUAL_IPS = 'lifx.manual_ips';
 const SETTINGS_CLOUD_TOKEN = 'lifx.cloud_token';
-
-type LifxDevice = LifxBulbDevice | LifxMultizoneDevice;
+const SCENE_REFRESH_MS = 30 * 60 * 1000;
 
 export default class LifxApp extends Homey.App {
   private client!: LifxClient;
-  private effects!: EffectManager;
-  private themes!: ThemeStore;
   private cloud: LifxCloudClient | null = null;
+  private sceneActivatedTrigger?: Homey.FlowCardTriggerDevice;
+  private scenesTimer?: NodeJS.Timeout;
+  private lastCloudStop = new Map<string, number>();
 
   override async onInit(): Promise<void> {
     this.log('LIFX (LAN) app starting');
 
     const manualIps = (this.homey.settings.get(SETTINGS_MANUAL_IPS) as string[] | undefined) ?? [];
-
     this.client = new LifxClient(
       { log: (...a) => this.log(...a), error: (...a) => this.error(...a) },
       manualIps,
     );
-    this.effects = new EffectManager(this.client);
-    this.themes = new ThemeStore(this.homey.settings);
     this.rebuildCloud();
 
     this.homey.settings.on('set', (key: string) => {
@@ -44,96 +37,16 @@ export default class LifxApp extends Homey.App {
     await this.client.start();
     this.registerFlow();
 
-    // Warm the scenes cache in the background
     if (this.cloud) {
       this.cloud.listScenes().catch((err) => this.error('scene warm failed:', err));
     }
+    this.scenesTimer = setInterval(() => {
+      this.refreshAllScenePickers().catch(() => {});
+    }, SCENE_REFRESH_MS);
   }
-
-  private rebuildCloud(): void {
-    const token = (this.homey.settings.get(SETTINGS_CLOUD_TOKEN) as string | undefined)?.trim();
-    if (!token) {
-      this.cloud = null;
-      return;
-    }
-    this.cloud = new LifxCloudClient(token, {
-      log: (...a) => this.log('[cloud]', ...a),
-      error: (...a) => this.error('[cloud]', ...a),
-    });
-  }
-
-  getCloud(): LifxCloudClient | null {
-    return this.cloud;
-  }
-
-  /**
-   * Returns the dropdown options for the `lifx_scene` capability, fresh from
-   * the cloud (or the 30-min cache). Includes a leading "(Pick a scene)"
-   * placeholder so the picker has a neutral default.
-   */
-  async getScenePickerValues(): Promise<Array<{ id: string; title: { en: string } }>> {
-    if (!this.cloud) {
-      return [{ id: '__none__', title: { en: 'No cloud token configured' } }];
-    }
-    try {
-      const scenes = await this.cloud.listScenes();
-      if (scenes.length === 0) {
-        return [{ id: '__none__', title: { en: 'No scenes saved in LIFX app' } }];
-      }
-      return [
-        { id: '__none__', title: { en: '— Pick a scene —' } },
-        ...scenes.map((s) => ({ id: s.uuid, title: { en: s.name } })),
-      ];
-    } catch (err) {
-      this.error('scene picker fetch failed:', err);
-      return [{ id: '__none__', title: { en: 'Cloud error — check token' } }];
-    }
-  }
-
-  async activateSceneById(uuid: string, durationSec?: number): Promise<void> {
-    if (!this.cloud) throw new Error('LIFX cloud token not configured.');
-    await this.cloud.activateScene(uuid, durationSec);
-    this.lastCloudStop.clear();
-  }
-
-  async refreshAllScenePickers(): Promise<void> {
-    if (this.cloud) this.cloud.invalidate();
-    const values = await this.getScenePickerValues();
-    for (const driverId of ['bulb', 'multizone']) {
-      try {
-        const driver = this.homey.drivers.getDriver(driverId);
-        for (const device of driver.getDevices()) {
-          if (device.hasCapability('lifx_scene')) {
-            await device.setCapabilityOptions('lifx_scene', { values });
-          }
-        }
-      } catch {
-        // driver not ready — fine
-      }
-    }
-  }
-
-  /**
-   * Best-effort: tell the LIFX cloud to cancel any firmware effect (Morph,
-   * Flame, etc.) running on this bulb, so a subsequent LAN write will stick.
-   * Debounced per device so slider drags don't spam the cloud's rate limit.
-   */
-  async maybeStopCloudEffects(deviceId: string): Promise<void> {
-    if (!this.cloud) return;
-    const now = Date.now();
-    const last = this.lastCloudStop.get(deviceId) ?? 0;
-    if (now - last < 3_000) return;
-    this.lastCloudStop.set(deviceId, now);
-    try {
-      await this.cloud.stopEffects(`id:${deviceId}`);
-    } catch (err) {
-      this.error('cloud stopEffects failed:', err);
-    }
-  }
-  private lastCloudStop = new Map<string, number>();
 
   override async onUninit(): Promise<void> {
-    await this.effects.stopAll().catch(() => {});
+    if (this.scenesTimer) clearInterval(this.scenesTimer);
     this.client.stop();
   }
 
@@ -141,12 +54,8 @@ export default class LifxApp extends Homey.App {
     return this.client;
   }
 
-  getEffects(): EffectManager {
-    return this.effects;
-  }
-
-  getThemes(): ThemeStore {
-    return this.themes;
+  getCloud(): LifxCloudClient | null {
+    return this.cloud;
   }
 
   rememberManualIp(ip: string): void {
@@ -165,55 +74,123 @@ export default class LifxApp extends Homey.App {
     this.client.removeManualIp(ip);
   }
 
-  private registerFlow(): void {
-    const themeAutocomplete = async (query: string): Promise<{ name: string; id: string }[]> => {
-      const q = (query ?? '').toLowerCase();
-      return this.themes
-        .list()
-        .filter((t) => !q || t.name.toLowerCase().includes(q))
-        .map((t) => ({ name: t.name, id: t.id }));
-    };
+  /**
+   * API endpoint — called from settings page to validate a token before saving.
+   * Uses an ad-hoc client (not the singleton) so we don't clobber the current
+   * configured cloud while testing.
+   */
+  async testCloudToken(token: string): Promise<{ ok: boolean; sceneCount?: number; error?: string }> {
+    if (!token) return { ok: false, error: 'Empty token' };
+    const probe = new LifxCloudClient(token, {
+      log: () => {},
+      error: () => {},
+    });
+    try {
+      const scenes = await probe.listScenes(true);
+      return { ok: true, sceneCount: scenes.length };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
 
-    const morph = this.homey.flow.getActionCard('effect_morph');
-    morph.registerArgumentAutocompleteListener('theme', themeAutocomplete);
-    morph.registerRunListener(
-      async (args: {
-        device: LifxDevice;
-        theme: { id: string };
-        cycle_ms?: number;
-      }) => {
-        const theme = this.themes.get(args.theme.id);
-        if (!theme) throw new Error(`Theme "${args.theme.id}" no longer exists.`);
-        if (theme.colors.length === 0) throw new Error(`Theme "${theme.name}" has no colors.`);
-        await this.effects.startMorph(args.device.getLifxId(), theme.colors, {
-          cycleMs: args.cycle_ms ?? 6000,
-          isMultiZone: args.device.isMultiZone(),
-        });
-      },
-    );
+  /**
+   * Returns the dropdown options for the `lifx_scene` capability, fresh from
+   * the cloud (or the 30-min cache). Includes a leading "— Pick a scene —"
+   * placeholder so the picker has a neutral default.
+   */
+  async getScenePickerValues(): Promise<Array<{ id: string; title: { en: string } }>> {
+    if (!this.cloud) {
+      return [{ id: '__none__', title: { en: 'No cloud token configured' } }];
+    }
+    try {
+      const scenes = await this.cloud.listScenes();
+      if (scenes.length === 0) {
+        return [{ id: '__none__', title: { en: 'No scenes saved in LIFX app' } }];
+      }
+      const sorted = [...scenes].sort((a, b) => a.name.localeCompare(b.name));
+      return [
+        { id: '__none__', title: { en: '— Pick a scene —' } },
+        ...sorted.map((s) => ({ id: s.uuid, title: { en: s.name } })),
+      ];
+    } catch (err) {
+      this.error('scene picker fetch failed:', err);
+      return [{ id: '__none__', title: { en: 'Cloud error — check token' } }];
+    }
+  }
 
-    const candle = this.homey.flow.getActionCard('effect_candle');
-    candle.registerRunListener(
-      async (args: { device: LifxDevice; intensity?: number }) => {
-        await this.effects.startCandle(args.device.getLifxId(), {
-          intensity: args.intensity ?? 0.6,
-          isMultiZone: args.device.isMultiZone(),
-        });
-      },
-    );
+  async activateSceneById(uuid: string, durationSec?: number): Promise<CloudScene | null> {
+    if (!this.cloud) throw new Error('LIFX cloud token not configured.');
+    await this.cloud.activateScene(uuid, durationSec);
+    this.lastCloudStop.clear();
 
-    const stop = this.homey.flow.getActionCard('effect_stop');
-    stop.registerRunListener(async (args: { device: LifxDevice }) => {
-      const id = args.device.getLifxId();
-      await this.effects.stop(id);
-      if (this.cloud) {
-        try {
-          await this.cloud.stopEffects(`id:${id}`);
-        } catch (err) {
-          this.error('cloud stopEffects failed:', err);
+    const scene = (await this.cloud.listScenes()).find((s) => s.uuid === uuid) ?? null;
+    this.refreshAllDevicesSoon();
+    return scene;
+  }
+
+  fireSceneActivatedTrigger(device: Homey.Device, scene: { uuid: string; name: string }): void {
+    if (!this.sceneActivatedTrigger) return;
+    this.sceneActivatedTrigger
+      .trigger(device, { scene_name: scene.name, scene_id: scene.uuid })
+      .catch((err) => this.error('scene_activated trigger failed:', err));
+  }
+
+  async refreshAllScenePickers(): Promise<void> {
+    if (this.cloud) this.cloud.invalidate();
+    const values = await this.getScenePickerValues();
+    try {
+      const driver = this.homey.drivers.getDriver('bulb');
+      for (const device of driver.getDevices()) {
+        if (device.hasCapability('lifx_scene')) {
+          await device.setCapabilityOptions('lifx_scene', { values });
         }
       }
+    } catch {
+      // driver not ready
+    }
+  }
+
+  /** After a scene activates on the cloud, poke each bulb to pull fresh state. */
+  private refreshAllDevicesSoon(): void {
+    setTimeout(() => {
+      try {
+        const driver = this.homey.drivers.getDriver('bulb');
+        for (const device of driver.getDevices() as LifxBulbDevice[]) {
+          device.refreshNow().catch(() => {});
+        }
+      } catch {
+        // driver not ready
+      }
+    }, 400);
+  }
+
+  async maybeStopCloudEffects(deviceId: string): Promise<void> {
+    if (!this.cloud) return;
+    const now = Date.now();
+    const last = this.lastCloudStop.get(deviceId) ?? 0;
+    if (now - last < 3_000) return;
+    this.lastCloudStop.set(deviceId, now);
+    try {
+      await this.cloud.stopEffects(`id:${deviceId}`);
+    } catch (err) {
+      this.error('cloud stopEffects failed:', err);
+    }
+  }
+
+  private rebuildCloud(): void {
+    const token = (this.homey.settings.get(SETTINGS_CLOUD_TOKEN) as string | undefined)?.trim();
+    if (!token) {
+      this.cloud = null;
+      return;
+    }
+    this.cloud = new LifxCloudClient(token, {
+      log: (...a) => this.log('[cloud]', ...a),
+      error: (...a) => this.error('[cloud]', ...a),
     });
+  }
+
+  private registerFlow(): void {
+    this.sceneActivatedTrigger = this.homey.flow.getDeviceTriggerCard('scene_activated');
 
     const scene = this.homey.flow.getActionCard('activate_scene');
     scene.registerArgumentAutocompleteListener('scene', async (query: string) => {
@@ -223,6 +200,7 @@ export default class LifxApp extends Homey.App {
         const q = (query ?? '').toLowerCase();
         return scenes
           .filter((s) => !q || s.name.toLowerCase().includes(q))
+          .sort((a, b) => a.name.localeCompare(b.name))
           .map((s) => ({ name: s.name, id: s.uuid }));
       } catch (err) {
         this.error('scene autocomplete failed:', err);
@@ -230,55 +208,14 @@ export default class LifxApp extends Homey.App {
       }
     });
     scene.registerRunListener(
-      async (args: { scene: { id: string; name: string }; duration_sec?: number }) => {
-        if (!this.cloud) {
-          throw new Error(
-            'LIFX cloud token not configured. Open the LIFX app in Homey, go to Settings, and paste a Personal Access Token from cloud.lifx.com/settings.',
-          );
-        }
-        await this.cloud.activateScene(args.scene.id, args.duration_sec);
-        // Fresh scene → next capability write should re-stop effects, so
-        // clear the per-device debounce window.
-        this.lastCloudStop.clear();
-      },
-    );
-
-    const theme = this.homey.flow.getActionCard('apply_theme');
-    theme.registerArgumentAutocompleteListener('theme', themeAutocomplete);
-    theme.registerRunListener(
-      async (args: { device: LifxDevice; theme: { id: string } }) => {
-        const id = args.device.getLifxId();
-        if (args.device.isMultiZone()) {
-          const zones = await this.client.getColorZones(id).catch(() => []);
-          const palette = this.themes.zoneColorsFor(
-            args.theme.id,
-            id,
-            Math.max(zones.length || 8, 2),
-          );
-          if (palette.length === 0) throw new Error('Theme has no colors.');
-          const chunk = Math.max(1, Math.floor(256 / palette.length));
-          for (let i = 0; i < palette.length; i++) {
-            const s = i * chunk;
-            const e = i === palette.length - 1 ? 255 : s + chunk - 1;
-            await this.client.setColorZones(id, s, e, toHSBK(palette[i]), 400, i === palette.length - 1);
-          }
-        } else {
-          const next = this.themes.nextColorFor(args.theme.id, id);
-          if (!next) throw new Error('Theme has no colors.');
-          await this.client.setColor(id, toHSBK(next), 400);
-        }
+      async (args: {
+        scene: { id: string; name: string };
+        duration_sec?: number;
+      }) => {
+        await this.activateSceneById(args.scene.id, args.duration_sec);
       },
     );
   }
-}
-
-function toHSBK(c: PaletteColor): { hue: number; saturation: number; brightness: number; kelvin: number } {
-  return {
-    hue: c.hue,
-    saturation: c.saturation,
-    brightness: c.brightness,
-    kelvin: c.kelvin ?? 3500,
-  };
 }
 
 module.exports = LifxApp;

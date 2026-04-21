@@ -21,6 +21,21 @@
       "usageOn": 11
     }
   },
+  "settings": [
+    {
+      "type": "group",
+      "label": { "en": "Device information" },
+      "children": [
+        { "id": "info_model", "type": "label", "label": { "en": "Model" }, "value": "—" },
+        { "id": "info_product_id", "type": "label", "label": { "en": "Product ID" }, "value": "—" },
+        { "id": "info_serial", "type": "label", "label": { "en": "Serial / MAC" }, "value": "—" },
+        { "id": "info_ip", "type": "label", "label": { "en": "IP address" }, "value": "—" },
+        { "id": "info_firmware_wifi", "type": "label", "label": { "en": "Wi-Fi firmware" }, "value": "—" },
+        { "id": "info_firmware_ble", "type": "label", "label": { "en": "BLE firmware" }, "value": "—" },
+        { "id": "info_capabilities", "type": "label", "label": { "en": "Capabilities" }, "value": "—" }
+      ]
+    }
+  ],
   "images": {
     "small": "/drivers/bulb/assets/images/small.png",
     "large": "/drivers/bulb/assets/images/large.png",

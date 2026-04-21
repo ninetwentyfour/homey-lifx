@@ -5,15 +5,26 @@ import type LifxApp from '../../app';
 interface PairDevice {
   name: string;
   data: { id: string };
+  icon?: string;
   store?: { address?: string; productId?: number; isMultiZone?: boolean };
 }
 
+// LIFX matrix/tube product IDs — see LIFX products.json. These get the
+// linear tube icon; everything else gets the A19 default.
+const TUBE_PRODUCT_IDS = new Set<number>([217, 218]);
+
+function iconForProduct(productId: number | undefined): string | undefined {
+  if (productId !== undefined && TUBE_PRODUCT_IDS.has(productId)) {
+    return '/drivers/bulb/assets/tube.svg';
+  }
+  return undefined; // default driver icon
+}
+
 /**
- * Driver for all single-zone LIFX bulbs (Original, Color A19, White 800, etc.).
- * Handles both mDNS-discovered pairing and manual-IP entry for legacy bulbs.
- *
- * Multi-zone devices (Tube, Beam, Z) go through the `multizone` driver so the
- * capability set and effect distribution can differ.
+ * Driver for all LIFX bulbs (A19, Original, Mini, BR30, Candle, GU10, Tube,
+ * Tile, …). Handles mDNS auto-pair and manual-IP entry for legacy firmware.
+ * Picks a per-device icon at pair time so the Tube doesn't look like an A19
+ * in the device list.
  */
 export default class LifxBulbDriver extends Homey.Driver {
   override async onInit(): Promise<void> {
@@ -37,10 +48,10 @@ export default class LifxBulbDriver extends Homey.Driver {
         if (!address) continue;
         try {
           const info = await client.identify(address, 3500);
-          if (info.isMultiZone) continue;
           devices.push({
             name: info.label,
             data: { id: info.id },
+            icon: iconForProduct(info.productId),
             store: { address: info.address, productId: info.productId, isMultiZone: false },
           });
         } catch (err) {
@@ -64,15 +75,11 @@ export default class LifxBulbDriver extends Homey.Driver {
       'manual_identify',
       async (data: { ip: string }): Promise<PairDevice> => {
         const info = await app.getClient().identify(data.ip, 5000);
-        if (info.isMultiZone) {
-          throw new Error(
-            `This appears to be a multi-zone device (${info.label}). Use the "LIFX Multizone" driver instead.`,
-          );
-        }
         app.rememberManualIp(info.address);
         return {
           name: info.label,
           data: { id: info.id },
+          icon: iconForProduct(info.productId),
           store: { address: info.address, productId: info.productId, isMultiZone: false },
         };
       },

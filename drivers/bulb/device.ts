@@ -2,21 +2,18 @@ import Homey from 'homey';
 
 import type LifxApp from '../../app';
 import type { LifxClient } from '../../lib/LifxClient';
-import type { EffectManager } from '../../lib/effects';
 import { powerFor } from '../../lib/energy';
 import type { HSBK } from '../../lib/types';
 
 const POLL_INTERVAL_MS = 15_000;
-const FIRST_REFRESH_DELAY_MS = 3_000;
+const STARTUP_FALLBACK_MS = 8_000;
 const UNAVAILABLE_THRESHOLD = 3;
 
-/**
- * Single-zone LIFX bulb device. Polls state every 15s for passive sync;
- * immediate capability writes update Homey on ack from the bulb.
- */
 export default class LifxBulbDevice extends Homey.Device {
   private pollTimer?: NodeJS.Timeout;
   private failures = 0;
+  private onlineHandler?: (id: string) => void;
+  private primed = false;
 
   override async onInit(): Promise<void> {
     this.log(`LifxBulbDevice init: ${this.getName()}`);
@@ -46,24 +43,39 @@ export default class LifxBulbDevice extends Homey.Device {
     }
 
     this.pollTimer = setInterval(() => {
-      this.refresh().catch((err) => this.error('refresh failed:', err));
+      this.refreshNow().catch((err) => this.error('refresh failed:', err));
     }, POLL_INTERVAL_MS);
 
-    // Delay first refresh so the library has time to unicast-discover the
-    // light on cold start. Skipping this races against startup and looks like
-    // a spurious "unreachable" flash in the UI.
+    // Kick the first refresh as soon as the library says the light is online,
+    // with a fallback timer in case the event never fires (e.g. bulb hasn't
+    // powered back on yet).
+    this.onlineHandler = (id: string) => {
+      if (id === this.getLifxId() && !this.primed) {
+        this.primed = true;
+        this.refreshNow().catch(() => {});
+      }
+    };
+    const client = (this.homey.app as LifxApp).getClient();
+    client.on('light-online', this.onlineHandler);
+    client.on('light-new', this.onlineHandler);
+
     setTimeout(() => {
-      this.refresh().catch(() => {});
-    }, FIRST_REFRESH_DELAY_MS);
+      if (!this.primed) {
+        this.primed = true;
+        this.refreshNow().catch(() => {});
+      }
+    }, STARTUP_FALLBACK_MS);
   }
 
   override async onDeleted(): Promise<void> {
     if (this.pollTimer) clearInterval(this.pollTimer);
-    // If this was a manual-IP device, let the app forget the IP
-    const address = this.getStoreValue('address') as string | undefined;
-    if (address) {
-      (this.homey.app as LifxApp).forgetManualIp(address);
+    if (this.onlineHandler) {
+      const client = (this.homey.app as LifxApp).getClient();
+      client.off('light-online', this.onlineHandler);
+      client.off('light-new', this.onlineHandler);
     }
+    const address = this.getStoreValue('address') as string | undefined;
+    if (address) (this.homey.app as LifxApp).forgetManualIp(address);
   }
 
   override async onDiscoveryAvailable(discoveryResult: Homey.DiscoveryResult): Promise<void> {
@@ -86,30 +98,106 @@ export default class LifxBulbDevice extends Homey.Device {
     }
   }
 
-  // ─── API used by flow actions ─────────────────────────────────────────
+  // ─── External API (used by app) ─────────────────────────────────────
 
   getLifxId(): string {
     return this.getData().id as string;
-  }
-
-  getEffects(): EffectManager {
-    return (this.homey.app as LifxApp).getEffects();
   }
 
   isMultiZone(): boolean {
     return false;
   }
 
-  // ─── Capability handlers ──────────────────────────────────────────────
+  /** Called from the app after a scene activation to pull fresh bulb state. */
+  async refreshNow(): Promise<void> {
+    return this.refresh();
+  }
+
+  /**
+   * Queries hardware + firmware info from the bulb and mirrors it into the
+   * Homey device store + Advanced Settings labels. Fire-and-forget; called
+   * once after the first successful state refresh. Subsequent boots read the
+   * store and only re-query if the bulb advertises a different firmware.
+   */
+  private async syncDeviceInfo(info: {
+    address: string;
+    productId: number;
+    productName?: string;
+    vendorName?: string;
+    firmwareWifi?: string;
+    firmwareBle?: string;
+  }): Promise<void> {
+    const capabilities = ['onoff', 'dim', 'color', 'temperature', 'scene'];
+    const patch = {
+      info_model: info.productName ?? `Product ${info.productId}`,
+      info_product_id: String(info.productId),
+      info_serial: this.getLifxId(),
+      info_ip: info.address,
+      info_firmware_wifi: info.firmwareWifi ?? '—',
+      info_firmware_ble: info.firmwareBle ?? '—',
+      info_capabilities: capabilities.join(', '),
+    };
+    try {
+      await this.setSettings(patch);
+    } catch (err) {
+      this.log('setSettings failed:', (err as Error).message);
+    }
+    await this.setStoreValue('productName', info.productName ?? null);
+    await this.setStoreValue('vendorName', info.vendorName ?? null);
+    await this.setStoreValue('firmwareWifi', info.firmwareWifi ?? null);
+    await this.setStoreValue('firmwareBle', info.firmwareBle ?? null);
+  }
+
+  // ─── Capability handlers ────────────────────────────────────────────
 
   private async onCapOnOff(value: boolean): Promise<void> {
     await this.client().setPower(this.getLifxId(), value, 400);
   }
 
+  private async onCapColor(changed: Record<string, unknown>): Promise<void> {
+    const colorChanged =
+      'light_hue' in changed ||
+      'light_saturation' in changed ||
+      'light_temperature' in changed ||
+      'light_mode' in changed;
+    if (colorChanged) {
+      void (this.homey.app as LifxApp).maybeStopCloudEffects(this.getLifxId());
+    }
+    const pick = <T>(cap: string): T | undefined =>
+      cap in changed ? (changed[cap] as T) : (this.getCapabilityValue(cap) as T);
+
+    const mode = pick<string>('light_mode') ?? 'color';
+    const dim = clamp01(asNumber(pick<number>('dim'), 1));
+    const brightness = dim * 100;
+
+    let hsbk: HSBK;
+    if (mode === 'temperature') {
+      const temperature = asNumber(pick<number>('light_temperature'), 0.5);
+      hsbk = { hue: 0, saturation: 0, brightness, kelvin: tempToKelvin(temperature) };
+    } else {
+      const hue = asNumber(pick<number>('light_hue'), 0) * 360;
+      const saturation = asNumber(pick<number>('light_saturation'), 1) * 100;
+      hsbk = { hue, saturation, brightness, kelvin: 3500 };
+    }
+
+    await this.client().setColor(this.getLifxId(), hsbk, 200);
+  }
+
   private async onCapScene(value: string): Promise<void> {
     if (!value || value === '__none__') return;
-    await (this.homey.app as LifxApp).activateSceneById(value);
+    const app = this.homey.app as LifxApp;
+    try {
+      const scene = await app.activateSceneById(value);
+      if (scene) app.fireSceneActivatedTrigger(this, scene);
+    } finally {
+      // Reset the picker so selecting the same scene again re-fires it.
+      setTimeout(() => {
+        this.setCapabilityValue('lifx_scene', '__none__').catch(() => {});
+      }, 500);
+    }
   }
+
+  // ─── Migrations + setup ─────────────────────────────────────────────
 
   private async applyPowerProfile(): Promise<void> {
     const productId = this.getStoreValue('productId') as number | undefined;
@@ -156,36 +244,7 @@ export default class LifxBulbDevice extends Homey.Device {
     }
   }
 
-  private async onCapColor(changed: Record<string, unknown>): Promise<void> {
-    const colorChanged =
-      'light_hue' in changed ||
-      'light_saturation' in changed ||
-      'light_temperature' in changed ||
-      'light_mode' in changed;
-    if (colorChanged) {
-      void (this.homey.app as LifxApp).maybeStopCloudEffects(this.getLifxId());
-    }
-    const pick = <T>(cap: string): T | undefined =>
-      cap in changed ? (changed[cap] as T) : (this.getCapabilityValue(cap) as T);
-
-    const mode = pick<string>('light_mode') ?? 'color';
-    const dim = clamp01(asNumber(pick<number>('dim'), 1));
-    const brightness = dim * 100;
-
-    let hsbk: HSBK;
-    if (mode === 'temperature') {
-      const temperature = asNumber(pick<number>('light_temperature'), 0.5);
-      hsbk = { hue: 0, saturation: 0, brightness, kelvin: tempToKelvin(temperature) };
-    } else {
-      const hue = asNumber(pick<number>('light_hue'), 0) * 360;
-      const saturation = asNumber(pick<number>('light_saturation'), 1) * 100;
-      hsbk = { hue, saturation, brightness, kelvin: 3500 };
-    }
-
-    await this.client().setColor(this.getLifxId(), hsbk, 200);
-  }
-
-  // ─── Polling ──────────────────────────────────────────────────────────
+  // ─── Polling ────────────────────────────────────────────────────────
 
   private async refresh(): Promise<void> {
     try {
@@ -202,6 +261,22 @@ export default class LifxBulbDevice extends Homey.Device {
       }
       this.failures = 0;
       if (!this.getAvailable()) await this.setAvailable();
+
+      // One-shot info mirror: update Advanced Settings when the info drifts
+      // from what we've stored (e.g. firmware updated, DHCP reassigned IP).
+      const storedIp = this.getStoreValue('address') as string | undefined;
+      const storedFw = this.getStoreValue('firmwareWifi') as string | undefined;
+      if (storedIp !== info.address || storedFw !== info.firmwareWifi) {
+        await this.setStoreValue('address', info.address);
+        await this.syncDeviceInfo({
+          address: info.address,
+          productId: info.productId,
+          productName: info.productName,
+          vendorName: info.vendorName,
+          firmwareWifi: info.firmwareWifi,
+          firmwareBle: info.firmwareBle,
+        });
+      }
     } catch (err) {
       this.failures++;
       this.log(`refresh miss ${this.failures}: ${(err as Error).message}`);
@@ -221,17 +296,12 @@ module.exports = LifxBulbDevice;
 function asNumber(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
-
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
-
-// Homey light_temperature is 0..1 (warm..cool). LIFX kelvin ranges 2500..9000.
 function tempToKelvin(t: number): number {
-  const kelvin = 2500 + clamp01(t) * (9000 - 2500);
-  return Math.round(kelvin);
+  return Math.round(2500 + clamp01(t) * (9000 - 2500));
 }
-
 function kelvinToTemp(kelvin: number): number {
   return clamp01((kelvin - 2500) / (9000 - 2500));
 }

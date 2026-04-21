@@ -1,10 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect x="40" y="32" width="176" height="192" rx="8" ry="8" fill="none" stroke="#0070C0" stroke-width="10"/>
-  <rect x="56" y="56" width="144" height="20" rx="4" fill="#0070C0"/>
-  <circle cx="80" cy="66" r="5" fill="#fff"/>
-  <circle cx="100" cy="66" r="5" fill="#fff"/>
-  <line x1="56" y1="100" x2="200" y2="100" stroke="#0070C0" stroke-width="6"/>
-  <line x1="56" y1="160" x2="200" y2="160" stroke="#0070C0" stroke-width="6"/>
-  <circle cx="128" cy="130" r="14" fill="none" stroke="#0070C0" stroke-width="6"/>
-  <circle cx="128" cy="190" r="10" fill="none" stroke="#0070C0" stroke-width="5"/>
+  <defs>
+    <radialGradient id="bulbGlow" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#7ED7F2" stop-opacity="0.85" />
+      <stop offset="60%" stop-color="#00A9E0" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#00A9E0" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="bulbGlass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F5F9FB" />
+      <stop offset="100%" stop-color="#D8E4EB" />
+    </linearGradient>
+    <linearGradient id="bulbBase" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9AA5AC" />
+      <stop offset="100%" stop-color="#5C6770" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer glow -->
+  <ellipse cx="128" cy="104" rx="98" ry="92" fill="url(#bulbGlow)" />
+
+  <!-- A19 bulb glass -->
+  <path
+    d="M128 20c-42.5 0-77 34.5-77 77 0 28.9 15.9 54 39.4 67.1 4.6 2.6 7.6 7.3 7.6 12.6V182h60v-5.3c0-5.3 3-10 7.6-12.6C189.1 151 205 125.9 205 97c0-42.5-34.5-77-77-77z"
+    fill="url(#bulbGlass)"
+    stroke="#2B3A43"
+    stroke-width="3"
+  />
+
+  <!-- Inner LIFX-blue glow in the glass -->
+  <ellipse cx="128" cy="96" rx="48" ry="52" fill="#00A9E0" fill-opacity="0.22" />
+  <ellipse cx="118" cy="82" rx="18" ry="24" fill="#FFFFFF" fill-opacity="0.28" />
+
+  <!-- Neck collar -->
+  <rect x="96" y="182" width="64" height="8" rx="2" fill="#3A464F" />
+
+  <!-- E26 base -->
+  <path
+    d="M96 190h64v32c0 6-5 11-11 11h-42c-6 0-11-5-11-11v-32z"
+    fill="url(#bulbBase)"
+    stroke="#2B3A43"
+    stroke-width="2"
+  />
+
+  <!-- Screw threads -->
+  <path
+    d="M100 198h56 M100 208h56 M100 218h56"
+    stroke="#2B3A43"
+    stroke-width="2"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.6"
+  />
 </svg>

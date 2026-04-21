@@ -17,6 +17,10 @@ export interface LightInfo {
   address: string;
   label: string;
   productId: number;
+  productName?: string;
+  vendorName?: string;
+  firmwareWifi?: string;
+  firmwareBle?: string;
   isMultiZone: boolean;
   power: boolean;
   color: HSBK;
@@ -131,11 +135,32 @@ export class LifxClient extends EventEmitter {
   async collectInfo(light: any): Promise<LightInfo> {
     const state = await promisify1<LightState>((cb) => light.getState(cb));
     const hw = await promisify1<HardwareVersion>((cb) => light.getHardwareVersion(cb));
+
+    // Firmware queries can fail silently on older firmware — non-fatal.
+    let firmwareWifi: string | undefined;
+    let firmwareBle: string | undefined;
+    try {
+      const wifi = await promisify1<FirmwareVersion>((cb) => light.getFirmwareVersion(cb));
+      firmwareWifi = formatFirmware(wifi);
+    } catch {
+      // ignore
+    }
+    try {
+      const fw = await promisify1<FirmwareVersion>((cb) => light.getFirmwareInfo(cb));
+      firmwareBle = formatFirmware(fw);
+    } catch {
+      // ignore
+    }
+
     return {
       id: light.id,
       address: light.address,
       label: state.label || `LIFX ${String(light.id).slice(-6)}`,
       productId: hw.productId,
+      productName: hw.productName,
+      vendorName: hw.vendorName,
+      firmwareWifi,
+      firmwareBle,
       isMultiZone: MULTIZONE_PRODUCT_IDS.has(hw.productId),
       power: state.power > 0,
       color: normalizeColor(state.color),
@@ -218,6 +243,20 @@ interface HardwareVersion {
   productName: string;
   vendorId: number;
   vendorName: string;
+}
+
+interface FirmwareVersion {
+  majorVersion?: number;
+  minorVersion?: number;
+  build?: number;
+}
+
+function formatFirmware(v: FirmwareVersion | undefined): string | undefined {
+  if (!v) return undefined;
+  if (v.majorVersion === undefined && v.minorVersion === undefined) return undefined;
+  const major = v.majorVersion ?? 0;
+  const minor = v.minorVersion ?? 0;
+  return `${major}.${String(minor).padStart(2, '0')}`;
 }
 
 function normalizeColor(c: { hue: number; saturation: number; brightness: number; kelvin: number }): HSBK {

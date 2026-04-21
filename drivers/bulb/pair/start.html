@@ -2,34 +2,49 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; color: #222; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      p.sub { color: #777; font-size: 14px; margin: 0 0 20px; line-height: 1.4; }
+      button {
+        display: block; width: 100%; margin-bottom: 10px;
+        padding: 14px; font-size: 15px; font-weight: 600;
+        border: none; border-radius: 8px; cursor: pointer;
+      }
+      button.primary { background: #00A9E0; color: #fff; }
+      button.secondary { background: #fff; color: #222; border: 1px solid #bbb; }
+    </style>
   </head>
   <body>
-    <header class="homey-header">
-      <h1 class="homey-title">Add a LIFX bulb</h1>
-      <p class="homey-subtitle">
-        Newer firmware is auto-detected over mDNS. Older bulbs need their IP entered manually.
-      </p>
-    </header>
+    <h1>Add a LIFX bulb</h1>
+    <p class="sub">
+      Newer firmware is auto-detected over mDNS. Older bulbs need their IP entered manually.
+    </p>
 
-    <div class="homey-button-group" style="display: flex; flex-direction: column; gap: 10px;">
-      <button class="homey-button-primary-full" id="autoBtn">
-        Discover automatically (mDNS)
-      </button>
-      <button class="homey-button-secondary-full" id="manualBtn">
-        I know my bulb's IP address
-      </button>
-    </div>
+    <button class="primary" id="autoBtn">Discover automatically (mDNS)</button>
+    <button class="secondary" id="manualBtn">I know my bulb's IP address</button>
 
     <script type="text/javascript">
+      var ready = false;
+
       function onHomeyReady(Homey) {
-        Homey.ready();
-        document.getElementById('autoBtn').addEventListener('click', () => {
+        if (ready) return;
+        ready = true;
+        document.getElementById('autoBtn').addEventListener('click', function () {
           Homey.showView('list_devices');
         });
-        document.getElementById('manualBtn').addEventListener('click', () => {
+        document.getElementById('manualBtn').addEventListener('click', function () {
           Homey.showView('manual_ip');
         });
+        Homey.ready();
       }
+
+      // Some Homey mobile builds don't auto-invoke onHomeyReady; poll briefly.
+      setTimeout(function () {
+        if (!ready && typeof Homey !== 'undefined' && Homey) {
+          try { onHomeyReady(Homey); } catch (_e) { /* ignore */ }
+        }
+      }, 1500);
     </script>
   </body>
 </html>
